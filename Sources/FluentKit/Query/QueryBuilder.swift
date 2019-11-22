@@ -85,8 +85,8 @@ public final class QueryBuilder<Model>
     {
         print("HIII")
         return self.join(
-            From.self, From.key(for: \._$id),
-            to: To.self, To.key(for: \._$id),
+            To.self, To.key(for: \._$id),
+            to: From.self, From.key(for: \._$id),
             method: .inner,
             alias: alias
         )
