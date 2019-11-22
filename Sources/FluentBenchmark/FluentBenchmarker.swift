@@ -137,8 +137,9 @@ public final class FluentBenchmarker {
         ]) {
             let galaxies = try Galaxy.query(on: self.database)
                 .with(\.$planets)
-                .join(\.$planets)
-                .filter(Planet.self, \Planet.$name == "Earth")
+                //.join(\.$planets)
+                .sort(\Planet.$name, .descending)
+                //.filter(Planet.self, \Planet.$name == "Earth")
                 .all().wait()
 
             for galaxy in galaxies {
