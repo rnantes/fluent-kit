@@ -75,6 +75,23 @@ public final class QueryBuilder<Model>
         )
     }
 
+    // join children
+    @discardableResult
+    public func join<From, To>(
+        _ field: KeyPath<Model, Children<From, To>>,
+        alias: String? = nil
+    ) -> Self
+        where From: FluentKit.Model, To: FluentKit.Model
+    {
+        print("HIII")
+        return self.join(
+            From.self, From.key(for: \._$id),
+            to: To.self, To.key(for: \._$id),
+            method: .inner,
+            alias: alias
+        )
+    }
+
     @discardableResult
     public func join<Foreign, Local, Value>(
         _ foreign: KeyPath<Foreign, Field<Value?>>,
