@@ -83,7 +83,6 @@ public final class QueryBuilder<Model>
     ) -> Self
         where From: FluentKit.Model, To: FluentKit.Model
     {
-        print("HIII")
         return self.join(
             To.self, To.key(for: \._$id),
             to: From.self, From.key(for: \._$id),
