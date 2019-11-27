@@ -85,7 +85,7 @@ public final class QueryBuilder<Model>
     {
         //let string = To.key(for: field)
         return self.join(
-            To.self, To.key(for: \._$id),
+            To.self, To.key(for: \To._$id.field),
             to: From.self, From.key(for: \._$id),
             method: .inner,
             alias: alias
