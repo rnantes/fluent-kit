@@ -62,6 +62,7 @@ extension Parent: AnyProperty {
     func decode(from decoder: Decoder) throws {
         do {
             print("decode: 1")
+            print("\(_ModelCodingKey.self)")
             let container = try decoder.container(keyedBy: _ModelCodingKey.self)
             print("decode: 2")
             try self.$id.decode(from: container.superDecoder(forKey: .string(To.key(for: \._$id))))
