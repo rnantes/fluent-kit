@@ -60,8 +60,15 @@ extension Parent: AnyProperty {
     }
 
     func decode(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: _ModelCodingKey.self)
-        try self.$id.decode(from: container.superDecoder(forKey: .string(To.key(for: \._$id))))
+        do {
+            print("decode: 1")
+            let container = try decoder.container(keyedBy: _ModelCodingKey.self)
+            print("decode: 2")
+            try self.$id.decode(from: container.superDecoder(forKey: .string(To.key(for: \._$id))))
+            print("decode: 3")
+        } catch {
+            print("ERROR DECODE: \(error)")
+        }
         // TODO: allow for nested decoding
     }
 }
