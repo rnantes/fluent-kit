@@ -21,14 +21,8 @@ extension AnyModel {
         self.init()
         let container = try decoder.container(keyedBy: _ModelCodingKey.self)
         try self.properties.forEach { label, property in
-            if (label == "countryEntity") {
-                let decoder = ContainerDecoder(container: container, key: .string("country_id"))
-                try property.decode(from: decoder)
-            } else {
                 let decoder = ContainerDecoder(container: container, key: .string(label))
                 try property.decode(from: decoder)
-            }
-
         }
     }
 
