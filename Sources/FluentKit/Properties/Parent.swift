@@ -63,9 +63,10 @@ extension Parent: AnyProperty {
         do {
             print("decode: 1")
             print("\(_ModelCodingKey.self)")
-            let container = try decoder.container(keyedBy: _ModelCodingKey.self)
+            //let container = try decoder.container(keyedBy: _ModelCodingKey.self)
             print("decode: 2")
-            try self.$id.decode(from: container.superDecoder(forKey: .string(To.key(for: \._$id))))
+            try self.$id.decode(from: decoder.singleValueContainer())
+            //try self.$id.decode(from: container.superDecoder(forKey: .string(To.key(for: \._$id))))
             print("decode: 3")
         } catch {
             print("ERROR DECODE: \(error)")
