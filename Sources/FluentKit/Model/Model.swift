@@ -108,7 +108,13 @@ private struct ContainerEncoder: Encoder, SingleValueEncodingContainer {
 }
 
 extension Model {
-    static func key<Field>(for field: KeyPath<Self, Field>) -> String
+
+    /// Indicates whether the model has fields that have been set, but the model has not yet been saved to the database.
+    public var hasChanges: Bool {
+        return !self.input.isEmpty
+    }
+
+    public static func key<Field>(for field: KeyPath<Self, Field>) -> String
         where Field: FieldRepresentable
     {
         return Self.init()[keyPath: field].field.key
