@@ -33,7 +33,7 @@ public final class ModelSiblings<From, To, Through>: AnyProperty
     public var wrappedValue: [To] {
         get {
             guard let value = self.value else {
-                fatalError("Siblings relation not loaded.")
+                fatalError("Siblings relation not eager loaded, use $ prefix to access: \(name)")
             }
             return value
         }
@@ -235,11 +235,13 @@ private struct SiblingsEagerLoader<From, To, Through>: EagerLoader
             .all()
             .flatMapThrowing
         {
+            var map: [From.IDValue: [To]] = [:]
+            for to in $0 {
+                let fromID = try to.joined(Through.self)[keyPath: from].id
+                map[fromID, default: []].append(to)
+            }
             for model in models {
-                let id = model[keyPath: self.relationKey].idValue!
-                model[keyPath: self.relationKey].value = try $0.filter {
-                    try $0.joined(Through.self)[keyPath: from].id == id
-                }
+                model[keyPath: self.relationKey].value = map[model.id!] ?? []
             }
         }
     }

@@ -1,9 +1,11 @@
-@testable import FluentKit
+import FluentKit
 import Foundation
 import NIO
 import XCTest
 
 public final class FluentBenchmarker {
+    public static var idKey: String = "id"
+
     public let database: Database
 
     public init(database: Database) {
@@ -49,6 +51,7 @@ public final class FluentBenchmarker {
         try self.testRead()
         try self.testRelationMethods()
         try self.testSameChildrenFromKey()
+        try self.testSet()
         try self.testSiblingsAttach()
         try self.testSiblingsEagerLoad()
         try self.testSoftDelete()
