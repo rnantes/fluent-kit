@@ -1,36 +1,32 @@
-protocol AnyProperty: class {
+public protocol PropertyProtocol: AnyProperty {
+    associatedtype Model: Fields
+    associatedtype Value: Codable
+    var value: Value? { get set }
+}
+
+
+public protocol AnyProperty: class {
+    static var anyValueType: Any.Type { get }
+    var anyValue: Any? { get }
+
+    var path: [FieldKey] { get }
+    var nested: [AnyProperty] { get }
+
+    func input(to input: inout DatabaseInput)
     func output(from output: DatabaseOutput) throws
     func encode(to encoder: Encoder) throws
     func decode(from decoder: Decoder) throws
 }
 
-extension AnyProperty where Self: FieldRepresentable {
-    func output(from output: DatabaseOutput) throws {
-        try self.field.output(from: output)
+extension AnyProperty where Self: PropertyProtocol {
+    public var anyValue: Any? {
+        self.value
     }
 
-    func encode(to encoder: Encoder) throws {
-        try self.field.encode(to: encoder)
-    }
-
-    func decode(from decoder: Decoder) throws {
-        try self.field.decode(from: decoder)
+    public static var anyValueType: Any.Type {
+        Value.self
     }
 }
 
-extension AnyModel {
-    var properties: [(String, AnyProperty)] {
-        return Mirror(reflecting: self)
-            .children
-            .compactMap { child in
-                guard let label = child.label else {
-                    return nil
-                }
-                guard let property = child.value as? AnyProperty else {
-                    return nil
-                }
-                // remove underscore
-                return (String(label.dropFirst()), property)
-            }
-    }
-}
+public protocol FieldProtocol: AnyField, PropertyProtocol { }
+public protocol AnyField { }

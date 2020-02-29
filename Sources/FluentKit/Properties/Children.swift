@@ -1,23 +1,20 @@
 extension Model {
-    public typealias Children<To> = ModelChildren<Self, To>
+    public typealias Children<To> = ChildrenProperty<Self, To>
         where To: FluentKit.Model
 }
 
 @propertyWrapper
-public final class ModelChildren<From, To>: AnyProperty
+public final class ChildrenProperty<From, To>
     where From: Model, To: Model
 {
-    // MARK: ID
-
-    enum Key {
+    public enum Key {
         case required(KeyPath<To, To.Parent<From>>)
         case optional(KeyPath<To, To.OptionalParent<From>>)
     }
 
-    let parentKey: Key
+    public let parentKey: Key
     var idValue: From.IDValue?
 
-    // MARK: Wrapper
     public var value: [To]?
 
     public var description: String {
@@ -44,15 +41,13 @@ public final class ModelChildren<From, To>: AnyProperty
         }
     }
 
-    public var projectedValue: ModelChildren<From, To> {
+    public var projectedValue: ChildrenProperty<From, To> {
         return self
     }
     
     public var fromId: From.IDValue? {
         return self.idValue
     }
-
-    // MARK: Query
 
     public func query(on database: Database) -> QueryBuilder<To> {
         guard let id = self.idValue else {
@@ -95,41 +90,57 @@ public final class ModelChildren<From, To>: AnyProperty
         }
         return to.create(on: database)
     }
+}
 
-    // MARK: Property
+extension ChildrenProperty: PropertyProtocol {
+    public typealias Model = From
+    public typealias Value = [To]
+}
 
-    func output(from output: DatabaseOutput) throws {
-        let key = From.key(for: \._$id)
-        if output.contains(key) {
+extension ChildrenProperty: AnyProperty {
+    public var nested: [AnyProperty] {
+        []
+    }
+
+    public var path: [FieldKey] {
+        []
+    }
+
+    public func input(to input: inout DatabaseInput) {
+        // children never has input
+    }
+
+    public func output(from output: DatabaseOutput) throws {
+        let key = From()._$id.field.key
+        if output.contains([key]) {
             self.idValue = try output.decode(key, as: From.IDValue.self)
         }
     }
 
-    // MARK: Codable
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         if let rows = self.value {
             var container = encoder.singleValueContainer()
             try container.encode(rows)
         }
     }
 
-    func decode(from decoder: Decoder) throws {
+    public func decode(from decoder: Decoder) throws {
         // don't decode
     }
 }
 
-extension ModelChildren.Key: CustomStringConvertible {
-    var description: String {
+extension ChildrenProperty.Key: CustomStringConvertible {
+    public var description: String {
         switch self {
         case .optional(let keyPath):
-            return To.key(for: keyPath)
+            return To.path(for: keyPath.appending(path: \.$id)).description
         case .required(let keyPath):
-            return To.key(for: keyPath)
+            return To.path(for: keyPath.appending(path: \.$id)).description
         }
     }
 }
 
-extension ModelChildren: Relation {
+extension ChildrenProperty: Relation {
     public var name: String {
         "Children<\(From.self), \(To.self)>(for: \(self.parentKey))"
     }
@@ -141,7 +152,7 @@ extension ModelChildren: Relation {
     }
 }
 
-extension ModelChildren: EagerLoadable {
+extension ChildrenProperty: EagerLoadable {
     public static func eagerLoad<Builder>(
         _ relationKey: KeyPath<From, From.Children<To>>,
         to builder: Builder

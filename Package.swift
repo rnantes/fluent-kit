@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "fluent-kit",
     platforms: [
-       .macOS(.v10_14),
+       .macOS(.v10_15),
        .iOS(.v11)
     ],
     products: [
