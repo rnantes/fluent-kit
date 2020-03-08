@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
-        .package(url: "https://github.com/rnantes/sql-kit.git", .branch("add-custom-key-decoding-strategy")),
+        .package(url: "https://github.com/rnantes/sql-kit.git", .branch("all-encoding-strategies")),
     ],
     targets: [
         .target(name: "FluentKit", dependencies: [
