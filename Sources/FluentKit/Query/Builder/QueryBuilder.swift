@@ -233,7 +233,8 @@ public final class QueryBuilder<Model>
             }
         }
 
-        self.database.logger.info("\(self.query)")
+        // TODO: make optional
+        //self.database.logger.info("\(self.query)")
 
         let done = self.database.execute(query: query) { output in
             assert(
