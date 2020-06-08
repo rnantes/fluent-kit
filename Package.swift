@@ -11,16 +11,19 @@ let package = Package(
         .library(name: "FluentKit", targets: ["FluentKit"]),
         .library(name: "FluentBenchmark", targets: ["FluentBenchmark"]),
         .library(name: "FluentSQL", targets: ["FluentSQL"]),
+        .library(name: "XCTFluent", targets: ["XCTFluent"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
         .package(url: "https://github.com/rnantes/sql-kit.git", .branch("all-encoding-strategies")),
+        .package(url: "https://github.com/vapor/async-kit.git", from: "1.0.0")
     ],
     targets: [
         .target(name: "FluentKit", dependencies: [
             .product(name: "NIO", package: "swift-nio"),
             .product(name: "Logging", package: "swift-log"),
+            .product(name: "AsyncKit", package: "async-kit"),
         ]),
         .target(name: "FluentBenchmark", dependencies: [
             .target(name: "FluentKit"),
@@ -30,9 +33,13 @@ let package = Package(
             .target(name: "FluentKit"),
             .product(name: "SQLKit", package: "sql-kit"),
         ]),
+        .target(name: "XCTFluent", dependencies: [
+            .target(name: "FluentKit")
+        ]),
         .testTarget(name: "FluentKitTests", dependencies: [
             .target(name: "FluentBenchmark"),
             .target(name: "FluentSQL"),
+            .target(name: "XCTFluent")
         ]),
     ]
 )

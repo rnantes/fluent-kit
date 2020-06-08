@@ -1,6 +1,9 @@
-extension Fields {
-    public typealias Timestamp = TimestampProperty<Self>
+extension Model {
+    public typealias Timestamp<Format> = TimestampProperty<Self, Format>
+        where Format: TimestampFormat
 }
+
+// MARK: Trigger
 
 public enum TimestampTrigger {
     case create
@@ -8,79 +11,141 @@ public enum TimestampTrigger {
     case delete
 }
 
-@propertyWrapper
-public final class TimestampProperty<Model>
-    where Model: FluentKit.Fields
-{
-    public let field: Model.OptionalField<Date>
-    public let trigger: TimestampTrigger
+// MARK: Type
 
-    public var projectedValue: TimestampProperty<Model> {
+@propertyWrapper
+public final class TimestampProperty<Model, Format>
+    where Model: FluentKit.Model, Format: TimestampFormat
+{
+    @OptionalFieldProperty<Model, Format.Value>
+    public var timestamp: Format.Value?
+
+    public let trigger: TimestampTrigger
+    let format: Format
+
+    public var projectedValue: TimestampProperty<Model, Format> {
         return self
     }
 
     public var wrappedValue: Date? {
         get {
-            self.value
+            self.value ?? nil
         }
         set {
-            self.value = newValue
+            self.value = .some(newValue)
         }
     }
 
-    public init(key: FieldKey, on trigger: TimestampTrigger) {
-        self.field = .init(key: key)
+    public convenience init(
+        key: FieldKey,
+        on trigger: TimestampTrigger,
+        format: TimestampFormatFactory<Format>
+    ) {
+        self.init(key: key, on: trigger, format: format.makeFormat())
+    }
+
+    public init(key: FieldKey, on trigger: TimestampTrigger, format: Format) {
+        self._timestamp = .init(key: key)
         self.trigger = trigger
+        self.format = format
     }
 
     public func touch(date: Date?) {
-        self.field.inputValue = .bind(date)
+        self.value = date
     }
 }
 
-extension TimestampProperty: PropertyProtocol {
-    public var value: Date? {
+extension TimestampProperty where Format == DefaultTimestampFormat {
+    public convenience init(key: FieldKey, on trigger: TimestampTrigger) {
+        self.init(key: key, on: trigger, format: .default)
+    }
+}
+
+extension TimestampProperty: CustomStringConvertible {
+    public var description: String {
+        "@\(Model.self).Timestamp(key: \(self.key), trigger: \(self.trigger))"
+    }
+}
+
+// MARK: Property
+
+extension TimestampProperty: AnyProperty { }
+
+extension TimestampProperty: Property {
+    public var value: Date?? {
         get {
-            self.field.value
+            self.$timestamp.value.flatMap {
+                .some($0.flatMap { self.format.parse($0) })
+            }
         }
         set {
-            self.field.value = newValue
+            self.$timestamp.value = newValue.flatMap {
+                .some($0.flatMap { self.format.serialize($0) })
+            }
         }
     }
 }
 
-extension TimestampProperty: FieldProtocol { }
+// MARK: Queryable
 
-extension TimestampProperty: AnyProperty {
-    public var nested: [AnyProperty] {
-        []
-    }
-
+extension TimestampProperty: AnyQueryableProperty {
     public var path: [FieldKey] {
-        self.field.path
+        self.$timestamp.path
+    }
+}
+
+extension TimestampProperty: QueryableProperty { }
+
+// MARK: Database
+
+extension TimestampProperty: AnyDatabaseProperty {
+    public var keys: [FieldKey] {
+        self.$timestamp.keys
     }
     
-    public func input(to input: inout DatabaseInput) {
-        self.field.input(to: &input)
+    public func input(to input: DatabaseInput) {
+        self.$timestamp.input(to: input)
     }
 
     public func output(from output: DatabaseOutput) throws {
-        try self.field.output(from: output)
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        try self.field.encode(to: encoder)
-    }
-
-    public func decode(from decoder: Decoder) throws {
-        try self.field.decode(from: decoder)
+        try self.$timestamp.output(from: output)
     }
 }
 
-extension TimestampProperty: AnyTimestamp { }
+// MARK: Codable
+
+extension TimestampProperty: AnyCodableProperty {
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.value)
+    }
+
+    public func decode(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self.value = nil
+        } else {
+            self.value = try container.decode(Date?.self)
+        }
+    }
+}
+
+// MARK: Timestamp
+
+extension TimestampProperty: AnyTimestamp {
+    var key: FieldKey {
+        self.$timestamp.key
+    }
+
+    var currentTimestampInput: DatabaseQuery.Value {
+        self.format.serialize(Date()).flatMap { .bind($0) } ?? .null
+    }
+}
 
 protocol AnyTimestamp: AnyProperty {
+    var key: FieldKey { get }
     var trigger: TimestampTrigger { get }
+    var currentTimestampInput: DatabaseQuery.Value { get }
     func touch(date: Date?)
 }
 
@@ -120,13 +185,13 @@ extension Schema {
         guard let timestamp = self.init().deletedTimestamp else {
             return
         }
-
         let deletedAtField = DatabaseQuery.Field.path(
-            timestamp.path,
+            [timestamp.key],
             schema: self.schemaOrAlias
         )
-        let isNull = DatabaseQuery.Filter.value(deletedAtField, .equal, .null)
-        let isFuture = DatabaseQuery.Filter.value(deletedAtField, .greaterThan, .bind(Date()))
-        query.filters.append(.group([isNull, isFuture], .or))
+        query.filters.append(.group([
+            .value(deletedAtField, .equal, .null),
+            .value(deletedAtField, .greaterThan, timestamp.currentTimestampInput)
+        ], .or))
     }
 }

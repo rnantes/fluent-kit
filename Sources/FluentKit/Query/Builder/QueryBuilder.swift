@@ -1,3 +1,4 @@
+import AsyncKit
 import NIO
 
 public final class QueryBuilder<Model>
@@ -7,6 +8,7 @@ public final class QueryBuilder<Model>
 
     public let database: Database
     internal var includeDeleted: Bool
+    internal var shouldForceDelete: Bool
     internal var models: [Schema.Type]
     public var eagerLoaders: [AnyEagerLoader]
 
@@ -23,13 +25,15 @@ public final class QueryBuilder<Model>
         database: Database,
         models: [Schema.Type] = [],
         eagerLoaders: [AnyEagerLoader] = [],
-        includeDeleted: Bool = false
+        includeDeleted: Bool = false,
+        shouldForceDelete: Bool = false
     ) {
         self.query = query
         self.database = database
         self.models = models
         self.eagerLoaders = eagerLoaders
         self.includeDeleted = includeDeleted
+        self.shouldForceDelete = shouldForceDelete
         // Pass through custom ID key for database if used.
         let idKey = Model()._$id.key
         switch idKey {
@@ -45,19 +49,20 @@ public final class QueryBuilder<Model>
             database: self.database,
             models: self.models,
             eagerLoaders: self.eagerLoaders,
-            includeDeleted: self.includeDeleted
+            includeDeleted: self.includeDeleted,
+            shouldForceDelete: self.shouldForceDelete
         )
     }
 
     // MARK: Fields
     public func field<Field>(_ field: KeyPath<Model, Field>) -> Self
-        where Field: FieldProtocol, Field.Model == Model
+        where Field: QueryableProperty, Field.Model == Model
     {
         self.field(Model.self, field)
     }
 
     public func field<Joined, Field>(_ joined: Joined.Type, _ field: KeyPath<Joined, Field>) -> Self
-        where Joined: Schema, Field: FieldProtocol, Field.Model == Joined
+        where Joined: Schema, Field: QueryableProperty, Field.Model == Joined
     {
         self.query.fields.append(.path(Joined.path(for: field), schema: Joined.schema))
         return self
@@ -81,7 +86,9 @@ public final class QueryBuilder<Model>
         return self.run()
     }
 
-    public func delete() -> EventLoopFuture<Void> {
+    public func delete(force: Bool = false) -> EventLoopFuture<Void> {
+        self.includeDeleted = true
+        self.shouldForceDelete = force
         self.query.action = .delete
         return self.run()
     }
@@ -132,7 +139,7 @@ public final class QueryBuilder<Model>
 
     public func all<Field>(_ key: KeyPath<Model, Field>) -> EventLoopFuture<[Field.Value]>
         where
-        Field: FieldProtocol,
+        Field: QueryableProperty,
         Field.Model == Model
     {
         let copy = self.copy()
@@ -150,7 +157,7 @@ public final class QueryBuilder<Model>
     ) -> EventLoopFuture<[Field.Value]>
         where
         Joined: Schema,
-        Field: FieldProtocol,
+        Field: QueryableProperty,
         Field.Model == Joined
     {
         let copy = self.copy()
@@ -196,9 +203,9 @@ public final class QueryBuilder<Model>
                     return self.database.eventLoop.makeSucceededFuture(())
                 }
                 // run eager loads
-                return .andAllSync(self.eagerLoaders.map { eagerLoad in
-                    { eagerLoad.anyRun(models: all, on: self.database) }
-                }, on: self.database.eventLoop)
+                return EventLoopFutureQueue(eventLoop: self.database.eventLoop).append(each: self.eagerLoaders) { loader in
+                    return loader.anyRun(models: all, on: self.database)
+                }
             }
         } else {
             return done
@@ -210,7 +217,7 @@ public final class QueryBuilder<Model>
         return self
     }
 
-    internal func run(_ onOutput: @escaping (DatabaseOutput) -> ()) -> EventLoopFuture<Void> {
+    public func run(_ onOutput: @escaping (DatabaseOutput) -> ()) -> EventLoopFuture<Void> {
         // make a copy of this query before mutating it
         // so that run can be called multiple times
         var query = self.query
@@ -220,7 +227,7 @@ public final class QueryBuilder<Model>
         if query.fields.isEmpty {
             for model in self.models {
                 query.fields += model.keys.map { path in
-                    .path(path, schema: model.schemaOrAlias)
+                    .path([path], schema: model.schemaOrAlias)
                 }
             }
         }
@@ -233,8 +240,25 @@ public final class QueryBuilder<Model>
             }
         }
 
-        // TODO: make optional
-        //self.database.logger.info("\(self.query)")
+        let forceDelete = Model.init().deletedTimestamp == nil
+            ? true : self.shouldForceDelete
+        switch query.action {
+        case .delete:
+            if !forceDelete {
+                query.action = .update
+                query.input = [.dictionary([:])]
+                self.addTimestamps(triggers: [.update, .delete], to: &query)
+            }
+        case .create:
+            self.addTimestamps(triggers: [.create, .update], to: &query)
+        case .update:
+            self.addTimestamps(triggers: [.update], to: &query)
+        default:
+            break
+        }
+
+        self.database.logger.debug("\(self.query)")
+        self.database.history?.add(self.query)
 
         let done = self.database.execute(query: query) { output in
             assert(
@@ -251,5 +275,23 @@ public final class QueryBuilder<Model>
             )
         }
         return done
+    }
+
+    private func addTimestamps(
+        triggers: [TimestampTrigger],
+        to query: inout DatabaseQuery
+    ) {
+        var data: [DatabaseQuery.Value] = []
+        for case .dictionary(var nested) in query.input {
+            let timestamps = Model().timestamps.filter { triggers.contains($0.trigger) }
+            for timestamp in timestamps {
+                // Only add timestamps if they weren't already set
+                if nested[timestamp.key] == nil {
+                    nested[timestamp.key] = timestamp.currentTimestampInput
+                }
+            }
+            data.append(.dictionary(nested))
+        }
+        query.input = data
     }
 }

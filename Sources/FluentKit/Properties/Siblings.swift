@@ -3,6 +3,8 @@ extension Model {
         where To: Model, Through: Model
 }
 
+// MARK: Type
+
 @propertyWrapper
 public final class SiblingsProperty<From, To, Through>
     where From: Model, To: Model, Through: Model
@@ -15,14 +17,14 @@ public final class SiblingsProperty<From, To, Through>
         case ifNotExists
     }
 
-    let from: KeyPath<Through, Through.Parent<From>>
-    let to: KeyPath<Through, Through.Parent<To>>
+    public let from: KeyPath<Through, Through.Parent<From>>
+    public let to: KeyPath<Through, Through.Parent<To>>
     var idValue: From.IDValue?
     
     public var value: [To]?
 
     public init(
-        through: Through.Type,
+        through _: Through.Type,
         from: KeyPath<Through, Through.Parent<From>>,
         to: KeyPath<Through, Through.Parent<To>>
     ) {
@@ -130,6 +132,24 @@ public final class SiblingsProperty<From, To, Through>
         return pivot.save(on: database)
     }
 
+
+    public func detach(_ tos: [To], on database: Database) -> EventLoopFuture<Void> {
+        guard let fromID = self.idValue else {
+            fatalError("Cannot detach siblings relation to unsaved model.")
+        }
+        let toIDs = tos.map { to -> To.IDValue in
+            guard let toID = to.id else {
+                fatalError("Cannot detach unsaved model.")
+            }
+            return toID
+        }
+
+        return Through.query(on: database)
+            .filter(self.from.appending(path: \.$id) == fromID)
+            .filter(self.to.appending(path: \.$id) ~~ toIDs)
+            .delete()
+    }
+
     public func detach(_ to: To, on database: Database) -> EventLoopFuture<Void> {
         guard let fromID = self.idValue else {
             fatalError("Cannot attach siblings relation to unsaved model.")
@@ -157,21 +177,29 @@ public final class SiblingsProperty<From, To, Through>
     }
 }
 
-extension SiblingsProperty: PropertyProtocol {
+extension SiblingsProperty: CustomStringConvertible {
+    public var description: String {
+        self.name
+    }
+}
+
+// MARK: Property
+
+extension SiblingsProperty: AnyProperty { }
+
+extension SiblingsProperty: Property {
     public typealias Model = From
     public typealias Value = [To]
 }
 
-extension SiblingsProperty: AnyProperty {
-    public var nested: [AnyProperty] {
-        []
-    }
+// MARK: Database
 
-    public var path: [FieldKey] {
+extension SiblingsProperty: AnyDatabaseProperty {
+    public var keys: [FieldKey] {
         []
     }
     
-    public func input(to input: inout DatabaseInput) {
+    public func input(to input: DatabaseInput) {
         // siblings never has input
     }
 
@@ -181,7 +209,11 @@ extension SiblingsProperty: AnyProperty {
             self.idValue = try output.decode(key, as: From.IDValue.self)
         }
     }
+}
 
+// MARK: Codable
+
+extension SiblingsProperty: AnyCodableProperty {
     public func encode(to encoder: Encoder) throws {
         if let rows = self.value {
             var container = encoder.singleValueContainer()
@@ -193,6 +225,8 @@ extension SiblingsProperty: AnyProperty {
         // don't decode
     }
 }
+
+// MARK: Relation
 
 extension SiblingsProperty: Relation {
     public var name: String {
@@ -207,6 +241,8 @@ extension SiblingsProperty: Relation {
         }
     }
 }
+
+// MARK: Eager Loadable
 
 extension SiblingsProperty: EagerLoadable {
     public static func eagerLoad<Builder>(

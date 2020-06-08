@@ -40,6 +40,8 @@ private struct MigrationLogMigration: Migration {
             .field("batch", .int, .required)
             .field("created_at", .datetime)
             .field("updated_at", .datetime)
+            .unique(on: "name")
+            .ignoreExisting()
             .create()
     }
 

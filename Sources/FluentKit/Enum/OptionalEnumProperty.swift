@@ -1,5 +1,5 @@
 extension Fields {
-    public typealias Enum<Value> = EnumProperty<Self, Value>
+    public typealias OptionalEnum<Value> = OptionalEnumProperty<Self, Value>
         where Value: Codable,
             Value: RawRepresentable,
             Value.RawValue == String
@@ -8,27 +8,24 @@ extension Fields {
 // MARK: Type
 
 @propertyWrapper
-public final class EnumProperty<Model, Value>
+public final class OptionalEnumProperty<Model, WrappedValue>
     where Model: FluentKit.Fields,
-        Value: Codable,
-        Value: RawRepresentable,
-        Value.RawValue == String
+        WrappedValue: Codable,
+        WrappedValue: RawRepresentable,
+        WrappedValue.RawValue == String
 {
-    public let field: FieldProperty<Model, String>
+    public let field: OptionalFieldProperty<Model, String>
 
-    public var projectedValue: EnumProperty<Model, Value> {
+    public var projectedValue: OptionalEnumProperty<Model, WrappedValue> {
         return self
     }
 
-    public var wrappedValue: Value {
+    public var wrappedValue: WrappedValue? {
         get {
-            guard let value = self.value else {
-                fatalError("Cannot access enum field before it is initialized or fetched: \(self.field.key)")
-            }
-            return value
+            self.value ?? nil
         }
         set {
-            self.value = newValue
+            self.value = .some(newValue)
         }
     }
 
@@ -39,45 +36,49 @@ public final class EnumProperty<Model, Value>
 
 // MARK: Property
 
-extension EnumProperty: AnyProperty { }
+extension OptionalEnumProperty: AnyProperty { }
 
-extension EnumProperty: Property {
-    public var value: Value? {
+extension OptionalEnumProperty: Property {
+    public var value: WrappedValue?? {
         get {
             self.field.value.map {
-                Value(rawValue: $0)!
+                $0.map {
+                    WrappedValue(rawValue: $0)!
+                }
             }
         }
         set {
-            self.field.value = newValue?.rawValue
+            self.field.value = newValue?.map {
+                $0.rawValue
+            }
         }
     }
 }
 
 // MARK: Queryable
 
-extension EnumProperty: AnyQueryableProperty {
+extension OptionalEnumProperty: AnyQueryableProperty {
     public var path: [FieldKey] {
         self.field.path
     }
 }
 
-extension EnumProperty: QueryableProperty {
+extension OptionalEnumProperty: QueryableProperty {
     public static func queryValue(_ value: Value) -> DatabaseQuery.Value {
-        .enumCase(value.rawValue)
+        value.flatMap { .enumCase($0.rawValue) } ?? .null
     }
 }
 
 // MARK: Database
 
-extension EnumProperty: AnyDatabaseProperty {
+extension OptionalEnumProperty: AnyDatabaseProperty {
     public var keys: [FieldKey] {
         self.field.keys
     }
 
     public func input(to input: DatabaseInput) {
         if let value = self.value {
-            input.set(.enumCase(value.rawValue), at: self.field.key)
+            input.set(value.map { .enumCase($0.rawValue) } ?? .null, at: self.field.key)
         }
     }
 
@@ -88,7 +89,7 @@ extension EnumProperty: AnyDatabaseProperty {
 
 // MARK: Codable
 
-extension EnumProperty: AnyCodableProperty {
+extension OptionalEnumProperty: AnyCodableProperty {
     public func encode(to encoder: Encoder) throws {
         try self.field.encode(to: encoder)
     }
@@ -97,3 +98,4 @@ extension EnumProperty: AnyCodableProperty {
         try self.field.decode(from: decoder)
     }
 }
+
