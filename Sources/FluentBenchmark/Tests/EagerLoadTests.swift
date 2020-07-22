@@ -8,6 +8,7 @@ extension FluentBenchmarker {
         try self.testEagerLoad_childrenJSON()
         try self.testEagerLoad_emptyChildren()
         try self.testEagerLoad_throughNilOptionalParent()
+        try self.testEagerLoad_throughAllNilOptionalParent()
     }
 
     private func testEagerLoad_nesting() throws {
@@ -22,8 +23,7 @@ extension FluentBenchmarker {
                     }
                 }
                 .all().wait()
-
-            try print(prettyJSON(galaxies))
+            self.database.logger.debug(prettyJSON(galaxies))
         }
     }
 
@@ -105,8 +105,7 @@ extension FluentBenchmarker {
             let planets = try Planet.query(on: self.database)
                 .with(\.$star)
                 .all().wait()
-
-            try print(prettyJSON(planets))
+            self.database.logger.debug(prettyJSON(planets))
         }
     }
 
@@ -117,7 +116,7 @@ extension FluentBenchmarker {
             let galaxies = try Galaxy.query(on: self.database)
                 .with(\.$stars)
                 .all().wait()
-            try print(prettyJSON(galaxies))
+            self.database.logger.debug(prettyJSON(galaxies))
         }
     }
 
@@ -151,7 +150,6 @@ extension FluentBenchmarker {
                 a.$b.id = b.id
                 try a.create(on: self.database).wait()
             }
-
             do {
                 let c = C()
                 try c.create(on: self.database).wait()
@@ -169,6 +167,30 @@ extension FluentBenchmarker {
                 $0.with(\.$c)
             }.all().wait()
             XCTAssertEqual(a.count, 2)
+        }
+    }
+
+    private func testEagerLoad_throughAllNilOptionalParent() throws {
+        try self.runTest(#function, [
+            ABCMigration()
+        ]) {
+            do {
+                let c = C()
+                try c.create(on: self.database).wait()
+
+                let b = B()
+                b.$c.id = c.id!
+                try b.create(on: self.database).wait()
+
+                let a = A()
+                a.$b.id = nil
+                try a.create(on: self.database).wait()
+            }
+
+            let a = try A.query(on: self.database).with(\.$b) {
+                $0.with(\.$c)
+            }.all().wait()
+            XCTAssertEqual(a.count, 1)
         }
     }
 }
@@ -224,10 +246,10 @@ private struct ABCMigration: Migration {
     }
 }
 
-func prettyJSON<T>(_ value: T) throws -> String
+func prettyJSON<T>(_ value: T) -> Logger.Message
     where T: Encodable
 {
     let encoder = JSONEncoder()
     encoder.outputFormatting = .prettyPrinted
-    return try String(decoding: encoder.encode(value), as: UTF8.self)
+    return try! .init(stringLiteral: String(decoding: encoder.encode(value), as: UTF8.self))
 }

@@ -3,6 +3,7 @@
 import XCTest
 import Foundation
 import FluentSQL
+import XCTFluent
 
 final class FluentKitTests: XCTestCase {
     func testMigrationLogNames() throws {
@@ -30,7 +31,7 @@ final class FluentKitTests: XCTestCase {
         db.reset()
         
         _ = try Planet.query(on: db)
-            .join(Star.self, on: \Planet.$star.$id == \Star.$id)
+            .join(parent: \Planet.$star)
             .sort(Star.self, \.$name, .ascending)
             .all().wait()
         XCTAssertEqual(db.sqlSerializers.count, 1)
@@ -43,7 +44,7 @@ final class FluentKitTests: XCTestCase {
         db.reset()
         
         _ = try Planet.query(on: db)
-            .join(Star.self, on: \Planet.$star.$id == \Star.$id)
+            .join(parent: \.$star)
             .sort(Star.self, \.$id, .ascending)
             .all().wait()
         XCTAssertEqual(db.sqlSerializers.count, 1)
@@ -56,11 +57,30 @@ final class FluentKitTests: XCTestCase {
         db.reset()
         
         _ = try Planet.query(on: db)
-            .join(Star.self, on: \Planet.$star.$id == \Star.$id)
+            .join(parent: \Planet.$star)
             .sort(Star.self, "name", .ascending)
             .all().wait()
         XCTAssertEqual(db.sqlSerializers.count, 1)
         XCTAssertEqual(db.sqlSerializers.first?.sql.contains(#"ORDER BY "stars"."name" ASC"#), true)
+        db.reset()
+    }
+
+    func testJoins() throws {
+        let db = DummyDatabaseForTestSQLSerializer()
+        _ = try Planet.query(on: db).join(children: \Planet.$moons).all().wait()
+        XCTAssertEqual(db.sqlSerializers.count, 1)
+        XCTAssertEqual(db.sqlSerializers.first?.sql.contains(#"INNER JOIN "moons" ON "planets"."id" = "moons"."planet_id"#), true)
+        db.reset()
+
+        _ = try Planet.query(on: db).join(parent: \Planet.$star).all().wait()
+        XCTAssertEqual(db.sqlSerializers.count, 1)
+        XCTAssertEqual(db.sqlSerializers.first?.sql.contains(#"INNER JOIN "stars" ON "planets"."star_id" = "stars"."id"#), true)
+        db.reset()
+
+        _ = try Planet.query(on: db).join(siblings: \Planet.$tags).all().wait()
+        XCTAssertEqual(db.sqlSerializers.count, 1)
+        XCTAssertEqual(db.sqlSerializers.first?.sql.contains(#"INNER JOIN "planet+tag" ON "planets"."id" = "planet+tag"."planet_id""#), true)
+        XCTAssertEqual(db.sqlSerializers.first?.sql.contains(#"INNER JOIN "tags" ON "planet+tag"."tag_id" = "tags"."id""#), true)
         db.reset()
     }
     
@@ -379,21 +399,127 @@ final class FluentKitTests: XCTestCase {
         }
 
     func testPlanel2FilterPlaceholder4() throws {
-            let db = DummyDatabaseForTestSQLSerializer()
-            _ = try Planet2
-                .query(on: db)
-                .filter(\.$nickName != "first")
-                .filter(\.$nickName != nil)
-                .filter(\.$nickName == "second")
-                .count()
-                .wait()
-            XCTAssertEqual(db.sqlSerializers.count, 1)
-            let result: String = (db.sqlSerializers.first?.sql)!
-            let expected = #"SELECT COUNT("planets"."id") AS "aggregate" FROM "planets" WHERE "planets"."nickname" <> $1 AND "planets"."nickname" IS NOT NULL AND "planets"."nickname" = $2"#
-            XCTAssertEqual(result, expected)
-            db.reset()
+        let db = DummyDatabaseForTestSQLSerializer()
+        _ = try Planet2
+            .query(on: db)
+            .filter(\.$nickName != "first")
+            .filter(\.$nickName != nil)
+            .filter(\.$nickName == "second")
+            .count()
+            .wait()
+        XCTAssertEqual(db.sqlSerializers.count, 1)
+        let result: String = (db.sqlSerializers.first?.sql)!
+        let expected = #"SELECT COUNT("planets"."id") AS "aggregate" FROM "planets" WHERE "planets"."nickname" <> $1 AND "planets"."nickname" IS NOT NULL AND "planets"."nickname" = $2"#
+        XCTAssertEqual(result, expected)
+        db.reset()
+    }
+
+    func testLoggerOverride() throws {
+        let db: Database = DummyDatabaseForTestSQLSerializer()
+        XCTAssertEqual(db.logger.logLevel, .info)
+        var logger = db.logger
+        logger.logLevel = .critical
+        let new = db.logging(to: logger)
+        XCTAssertEqual(new.logger.logLevel, .critical)
+    }
+
+    func testEnumDecode() throws {
+        enum Bar: String, Codable, Equatable {
+            case baz
+        }
+        final class Foo: Model {
+            static let schema = "foos"
+            @ID var id: UUID?
+            @Enum(key: "bar") var bar: Bar
+            init() { }
+        }
+
+        do {
+            let foo = try JSONDecoder().decode(Foo.self, from: Data("""
+            {"bar": "baz"}
+            """.utf8))
+            XCTAssertEqual(foo.bar, .baz)
+        }
+        do {
+            _ = try JSONDecoder().decode(Foo.self, from: Data("""
+            {"bar": "qux"}
+            """.utf8))
+            XCTFail("should not have passed")
+        } catch DecodingError.typeMismatch(let foo, let context) {
+            XCTAssert(foo is Bar.Type)
+            XCTAssertEqual(context.codingPath.map(\.stringValue), ["bar"])
         }
     }
+
+    func testOptionalEnumDecode() throws {
+        enum Bar: String, Codable, Equatable {
+            case baz
+        }
+        final class Foo: Model {
+            static let schema = "foos"
+            @ID var id: UUID?
+            @OptionalEnum(key: "bar") var bar: Bar?
+            init() { }
+        }
+
+        do {
+            let foo = try JSONDecoder().decode(Foo.self, from: Data("""
+            {"bar": "baz"}
+            """.utf8))
+            XCTAssertEqual(foo.bar, .baz)
+        }
+        do {
+            _ = try JSONDecoder().decode(Foo.self, from: Data("""
+            {"bar": "qux"}
+            """.utf8))
+            XCTFail("should not have passed")
+        } catch DecodingError.typeMismatch(let foo, let context) {
+            XCTAssert(foo is Bar?.Type)
+            XCTAssertEqual(context.codingPath.map(\.stringValue), ["bar"])
+        }
+    }
+
+    func testDatabaseGeneratedIDOverride() throws {
+        final class Foo: Model {
+            static let schema = "foos"
+            @ID(custom: .id) var id: Int?
+            init() { }
+            init(id: Int?) {
+                self.id = id
+            }
+        }
+
+
+        let test = CallbackTestDatabase { query in
+            switch query.input[0] {
+            case .dictionary(let input):
+                switch input["id"] {
+                case .bind(let bind):
+                    XCTAssertEqual(bind as? Int, 1)
+                default:
+                    XCTFail("invalid input: \(input)")
+                }
+            default:
+                XCTFail("invalid input: \(query)")
+            }
+            return [
+                TestOutput(["id": 0])
+            ]
+        }
+        let foo = Foo(id: 1)
+        try foo.create(on: test.db).wait()
+        XCTAssertEqual(foo.id, 1)
+    }
+
+
+    func testQueryBuilderFieldsFor() throws {
+        let test = ArrayTestDatabase()
+        let builder = User.query(on: test.db)
+        XCTAssertEqual(builder.query.fields.count, 0)
+        _ = builder.fields(for: User.self)
+        XCTAssertEqual(builder.query.fields.count, 9)
+    }
+}
 
 final class User: Model {
     static let schema = "users"

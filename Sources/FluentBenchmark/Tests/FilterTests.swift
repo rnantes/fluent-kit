@@ -9,6 +9,7 @@ extension FluentBenchmarker {
         try self.testFilter_group()
         try self.testFilter_emptyGroup()
         try self.testFilter_emptyRightHandSide()
+        try self.testFilter_optionalStringContains()
     }
 
     private func testFilter_field() throws {
@@ -92,5 +93,40 @@ extension FluentBenchmarker {
             let secondQuery = try Planet.query(on: self.database).filter(\.$id ~~ []).filter(\.$id !~ [correctUUID]).count().wait()
             XCTAssertEqual(secondQuery, 0)
         }
+    }
+
+    private func testFilter_optionalStringContains() throws {
+        try self.runTest(#function, [
+            FooMigration()
+        ]) {
+            try Foo(bar: "foo").create(on: self.database).wait()
+            try Foo(bar: "bar").create(on: self.database).wait()
+            try Foo(bar: "baz").create(on: self.database).wait()
+            let foos = try Foo.query(on: self.database)
+                .filter(\.$bar ~~ "ba")
+                .all()
+                .wait()
+            XCTAssertEqual(foos.count, 2)
+        }
+    }
+}
+
+private final class Foo: Model {
+    static let schema = "foos"
+    @ID var id: UUID?
+    @OptionalField(key: "bar") var bar: String?
+    init() { }
+    init(bar: String? = nil) {
+        self.bar = bar
+    }
+}
+
+private struct FooMigration: Migration {
+    func prepare(on database: Database) -> EventLoopFuture<Void> {
+        database.schema("foos").id().field("bar", .string).create()
+    }
+
+    func revert(on database: Database) -> EventLoopFuture<Void> {
+        database.schema("foos").delete()
     }
 }
