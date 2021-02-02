@@ -49,9 +49,8 @@ public final class EnumBuilder {
     }
 
     // MARK: Private
-
     private func generateDatatype() -> EventLoopFuture<DatabaseSchema.DataType> {
-        self.initializeMetadata().flatMap {
+        EnumMetadata.migration.prepare(on: self.database).flatMap {
             self.updateMetadata()
         }.flatMap { _ in
             // Fetch the latest cases.
@@ -62,16 +61,6 @@ public final class EnumBuilder {
                 name: self.enum.name,
                 cases: cases.map { $0.case }
             ))
-        }
-    }
-
-    private func initializeMetadata() -> EventLoopFuture<Void> {
-        // Check to see if the table exists.
-        EnumMetadata.query(on: self.database).count().map { _ in
-            // Ignore count.
-        }.flatMapError { error in
-            // Table does not exist, create it.
-            EnumMetadata.migration.prepare(on: self.database)
         }
     }
 
@@ -94,15 +83,15 @@ public final class EnumBuilder {
             .filter(\.$name == self.enum.name)
             .delete()
             .flatMap
-        { _ in
-            EnumMetadata.query(on: self.database).count()
-        }.flatMap { count in
-            // If no enums are left, remove table.
-            if count == 0 {
-                return EnumMetadata.migration.revert(on: self.database)
-            } else {
-                return self.database.eventLoop.makeSucceededFuture(())
+            { _ in
+                EnumMetadata.query(on: self.database).count()
+            }.flatMap { count in
+                // If no enums are left, remove table.
+                if count == 0 {
+                    return EnumMetadata.migration.revert(on: self.database)
+                } else {
+                    return self.database.eventLoop.makeSucceededFuture(())
+                }
             }
-        }
     }
 }

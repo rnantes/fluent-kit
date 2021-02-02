@@ -6,7 +6,7 @@ public final class MigrationLog: Model {
         return MigrationLogMigration()
     }
 
-    @ID(key: .id)
+    @ID(key: FieldKey.id)
     public var id: UUID?
 
     @Field(key: "name")
@@ -23,7 +23,7 @@ public final class MigrationLog: Model {
 
     public init() { }
 
-    public init(id: IDValue? = nil, name: String, batch: Int) {
+    public init(id: UUID? = nil, name: String, batch: Int) {
         self.id = id
         self.name = name
         self.batch = batch
