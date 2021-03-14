@@ -1,20 +1,25 @@
 extension Fields {
-    public typealias Field<Value> = FieldProperty<Self, Value>
-        where Value: Codable
+    public typealias Field<Value> = FieldProperty<Self, Value> where Value: Codable
 }
+
+//extension Model {
+//    public typealias Field<Value> = FieldProperty<Self, Value> where Value: Codable
+//}
+
 
 // MARK: Type
 
 @propertyWrapper
 public final class FieldProperty<Model, Value>
-    where Model: FluentKit.Fields, Value: Codable
+where Model: FluentKit.Fields, Value: Codable
 {
     public let key: FieldKey
     var outputValue: Value?
     var inputValue: DatabaseQuery.Value?
+
     
-    public var projectedValue: FieldProperty<Model, Value> {
-        self
+    public var projectedValue:  FieldProperty<Model, Value> {
+        return self
     }
 
     public var wrappedValue: Value {

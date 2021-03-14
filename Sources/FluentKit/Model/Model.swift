@@ -1,4 +1,4 @@
-public protocol Model: AnyModel {
+public protocol Model: AnyModel, Fields {
     associatedtype IDValue: Codable, Hashable
     var id: IDValue? { get set }
   }

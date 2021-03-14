@@ -6,19 +6,24 @@ public final class MigrationLog: Model {
         return MigrationLogMigration()
     }
 
-    @ID(key: FieldKey.id)
+    //@ID(key: FieldKey.id)
+    @IDProperty<MigrationLog, UUID>(key:.id)
     public var id: UUID?
 
-    @Field(key: "name")
+    //@Field(key: "name")
+    @FieldProperty<MigrationLog, String>(key: "name")
     public var name: String
 
-    @Field(key: "batch")
+    //@Field(key: "batch")
+    @FieldProperty<MigrationLog, Int>(key: "batch")
     public var batch: Int
 
-    @Timestamp(key: "created_at", on: .create)
+    //@Timestamp(key: "created_at", on: .create)
+    @TimestampProperty<MigrationLog, DefaultTimestampFormat>(key: "created_at", on: .create)
     public var createdAt: Date?
 
-    @Timestamp(key: "updated_at", on: .update)
+    //@Timestamp(key: "updated_at", on: .update)
+    @TimestampProperty<MigrationLog, DefaultTimestampFormat>(key: "updated_at", on: .create)
     public var updatedAt: Date?
 
     public init() { }

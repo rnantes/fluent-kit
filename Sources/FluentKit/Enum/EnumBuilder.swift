@@ -49,12 +49,12 @@ public final class EnumBuilder {
     }
 
     // MARK: Private
-    private func generateDatatype() -> EventLoopFuture<DatabaseSchema.DataType> {
+    public func generateDatatype() -> EventLoopFuture<DatabaseSchema.DataType> {
         EnumMetadata.migration.prepare(on: self.database).flatMap {
             self.updateMetadata()
         }.flatMap { _ in
             // Fetch the latest cases.
-            EnumMetadata.query(on: self.database).filter(\.$name == self.enum.name).all()
+            EnumMetadata.query(on: self.database).filter(\EnumMetadata.$name == self.enum.name).all()
         }.map { cases in
             // Convert latest cases to usable DataType.
             .enum(.init(
